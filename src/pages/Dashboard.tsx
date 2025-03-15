@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [statusChecked, setStatusChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(
     null
@@ -87,6 +88,7 @@ export default function Dashboard() {
 
       try {
         // First check if user has any requests
+        console.log(statusChecked);
         const { data: requests, error: countError } = await supabase
           .from("user_requests")
           .select("id")
@@ -108,7 +110,6 @@ export default function Dashboard() {
           if (error) throw error;
 
           setApplicationStatus(data?.status || null);
-
           // If rejected, get the rejection reason
           if (data?.status === "rejected") {
             const { data: accessData } = await supabase
@@ -123,12 +124,7 @@ export default function Dashboard() {
           }
 
           // If application is approved, show success message and stop checking
-          if (data?.status === "approved") {
-            toast.success("Your application has been approved!", {
-              duration: 5000,
-              icon: "🎉",
-            });
-          } else if (data?.status === "rejected") {
+          if (data?.status === "rejected") {
             toast.error("Your application has been rejected.", {
               duration: 5000,
             });
@@ -154,6 +150,16 @@ export default function Dashboard() {
       navigate("/");
     }
   }, [hasRequest, applicationStatus, navigate]);
+
+  useEffect(() => {
+    if (applicationStatus === "approved" && !statusChecked) {
+      setStatusChecked(true);
+      toast.success("Your application has been approved!", {
+        duration: 5000,
+        icon: "🎉",
+      });
+    }
+  }, [applicationStatus]);
   if (isLoading && !applicationStatus && !showOnboarding) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
