@@ -126,28 +126,28 @@ export default function Messages() {
 
     try {
       let fileUrl = "";
+      let recieverid = "";
       if (selectedFile) {
         const fileExt = selectedFile.name.split(".").pop();
         const fileName = `${Math.random()}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
 
         const { error: uploadError, data } = await supabase.storage
-          .from("images")
+          .from("message-images")
           .upload(filePath, selectedFile);
 
         if (uploadError) throw uploadError;
 
         const {
           data: { publicUrl },
-        } = supabase.storage.from("images").getPublicUrl(filePath);
+        } = supabase.storage.from("message-images").getPublicUrl(filePath);
 
         fileUrl = publicUrl;
       }
-
       const { error } = await supabase.from("messages").insert([
         {
           sender_id: user.id,
-          receiver_id: adminId,
+          receiver_id: isAdmin ? selectedUser?.id : adminId,
           content: newMessage.trim(),
           image_url: fileUrl || null,
           created_at: new Date().toISOString(),
@@ -285,31 +285,34 @@ export default function Messages() {
                 <h2 className="text-lg font-semibold text-white">Users</h2>
               </div>
               <div className="overflow-y-auto h-[calc(100%-4rem)]">
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => setSelectedUser(u)}
-                    className={`w-full p-4 text-left hover:bg-slate-700/50 transition-colors ${
-                      selectedUser?.id === u.id ? "bg-slate-700/50" : ""
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3">
-                        <MessageSquare className="h-5 w-5 text-indigo-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-white truncate">
-                          {u.full_name || u.email}
-                        </h3>
-                        {u.last_message && (
-                          <p className="text-xs text-slate-400 truncate mt-1">
-                            {u.last_message}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                {users.map(
+                  (u) =>
+                    u.id !== adminId && (
+                      <button
+                        key={u.id}
+                        onClick={() => setSelectedUser(u)}
+                        className={`w-full p-4 text-left hover:bg-slate-700/50 transition-colors ${
+                          selectedUser?.id === u.id ? "bg-slate-700/50" : ""
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3">
+                            <MessageSquare className="h-5 w-5 text-indigo-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-medium text-white truncate">
+                              {u.full_name || u.email}
+                            </h3>
+                            {u.last_message && (
+                              <p className="text-xs text-slate-400 truncate mt-1">
+                                {u.last_message}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                )}
               </div>
             </div>
 
