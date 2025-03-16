@@ -75,8 +75,15 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    // Force show onboarding if not completed
+    // redirect if admin
+
+    if (user?.user_metadata.role == "admin") {
+      navigate("/purple");
+      setIsLoading(false);
+      return;
+    }
     if (user && !user.user_metadata?.onboarding_complete) {
+      // Force show onboarding if not completed
       setShowOnboarding(true);
     }
   }, [user, setShowOnboarding]);

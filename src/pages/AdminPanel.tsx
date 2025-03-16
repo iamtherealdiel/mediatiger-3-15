@@ -72,6 +72,7 @@ export default function AdminPanel() {
   const [applications, setApplications] = useState<ApplicationData[] | null>(
     null
   );
+
   const [isLoadingApplications, setIsLoadingApplications] = useState(false);
   const [applicationFilter, setApplicationFilter] = useState("pending");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -79,9 +80,17 @@ export default function AdminPanel() {
   const [selectedApplicationId, setSelectedApplicationId] = useState<
     string | null
   >(null);
-
+  const { user, signOut, showOnboarding, setShowOnboarding } = useAuth();
   const { user: currentUser } = useAuth();
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast.error("Error signing out");
+    }
+  };
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -239,7 +248,7 @@ export default function AdminPanel() {
           </Link>
           <button
             onClick={() => {
-              navigate("/");
+              handleSignOut();
             }}
             className="text-red-400 hover:text-red-300 flex items-center"
           >

@@ -60,8 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(({ data: { session } }) => {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
-        setLoading(false);
-
+        const isAdmin = currentUser?.user_metadata?.role === "admin";
         // If user is verified and just completed email confirmation, show onboarding
         if (
           currentUser?.email_confirmed_at &&
@@ -76,6 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If user is verified, redirect to dashboard
         if (currentUser?.email_confirmed_at) {
           navigate("/dashboard", { replace: true });
+        }
+        if (isAdmin) {
+          setLoading(false);
+          navigate("/purple");
         }
       })
       .catch((error) => {
@@ -95,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      const isAdmin = currentUser?.user_metadata?.role === "admin";
 
       // If user just verified their email, show the onboarding popup
       if (
@@ -116,6 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (currentUser?.email_confirmed_at) {
         navigate("/dashboard", { replace: true });
       }
+      if (isAdmin) {
+        setLoading(false);
+        navigate("/purple");
+      }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -191,7 +200,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Successfully signed in and verified
       showUniqueToast("Successfully logged in!", "success", "signin-success");
+      const isAdmin = data.user?.user_metadata?.role === "admin";
+
       navigate("/dashboard");
+      if (isAdmin) {
+        setLoading(false);
+        navigate("/purple");
+      }
     } catch (error: any) {
       console.error("Sign in error:", error);
       throw new Error(error.message || "Invalid credentials");

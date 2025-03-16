@@ -132,14 +132,14 @@ export default function Messages() {
         const filePath = `${user.id}/${fileName}`;
 
         const { error: uploadError, data } = await supabase.storage
-          .from("message-images")
+          .from("images")
           .upload(filePath, selectedFile);
 
         if (uploadError) throw uploadError;
 
         const {
           data: { publicUrl },
-        } = supabase.storage.from("message-images").getPublicUrl(filePath);
+        } = supabase.storage.from("images").getPublicUrl(filePath);
 
         fileUrl = publicUrl;
       }
