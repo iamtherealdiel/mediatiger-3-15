@@ -21,92 +21,83 @@ export default function Messages() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMessage, setNewMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Move the messages useEffect here, before the early return
-  useEffect(() => {
-    const fetchMessages = async () => {
-      if (!user) return;
+  // Simplified messages fetching - only get messages between user and admin
 
-      try {
-        const { data: messages, error } = await supabase
-          .from("messages")
-          .select("*")
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-          .order("created_at", { ascending: true });
+  // Simplified admin user fetching - only get the admin user
 
-        console.log("Fetched messages:", messages); // Debug log
-        if (error) throw error;
-        setMessages(messages || []);
-      } catch (error) {
-        console.error("Error fetching messages:", error);
+  const fetchUsers = async () => {
+    if (!user || !isAdmin) return;
+
+    try {
+      const { data: messages, error: messagesError } = await supabase
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (messagesError) throw messagesError;
+
+      const { data: allUsers, error: usersError } = await supabase
+        .from("profiles")
+        .select("*");
+      if (usersError) throw usersError;
+      console.log("allUsers ", allUsers);
+      // Filter out admin users and organize messages by user
+      const messageUserIds = [
+        ...new Set(messages?.flatMap((m) => [m.sender_id, m.receiver_id])),
+      ];
+
+      const nonAdminUsers = allUsers.filter(
+        (u) =>
+          u.user_metadata?.role !== "admin" && messageUserIds.includes(u.id)
+      );
+
+      const usersWithMessages = nonAdminUsers.map((u) => {
+        const lastMessage = messages?.find(
+          (m) => m.sender_id === u.id || m.receiver_id === u.id
+        );
+        return {
+          ...u,
+          last_message: lastMessage?.content || "",
+          last_message_time: lastMessage?.created_at || "",
+        };
+      });
+
+      // Sort users by last message time
+      const sortedUsers = usersWithMessages.sort(
+        (a, b) =>
+          new Date(b.last_message_time).getTime() -
+          new Date(a.last_message_time).getTime()
+      );
+
+      setUsers(sortedUsers);
+      if (!selectedUser && sortedUsers.length > 0) {
+        setSelectedUser(sortedUsers[0]);
       }
-    };
-
-    fetchMessages();
-
-    const subscription = supabase
-      .channel("messages")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `sender_id=eq.${user.id} OR receiver_id=eq.${user.id}`,
-        },
-        (payload) => {
-          console.log("Real-time update received:", payload); // Debug log
-          fetchMessages();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [user]);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  };
 
   useEffect(() => {
     const loadAdminUser = async () => {
       if (!user) return;
 
       try {
-        // If user is admin, they need to see all users
-        const isAdmin = user.user_metadata?.role === "admin";
-        console.log(user.user_metadata);
-        if (isAdmin) {
-          // Admin sees all users with pending/approved applications
-          const { data: users, error } = await supabase
-            .from("user_requests")
-            .select("user_id")
-            .in("status", ["pending", "approved"])
-            .limit(1)
-            .single();
+        fetchUsers();
+        const { data: adminUsers, error } =
+          await supabase.auth.admin.listUsers();
+        if (error) throw error;
 
-          if (error) throw error;
-
-          // Get user details
-          const { data: userData, error: userError } =
-            await supabase.auth.admin.getUserById(users.user_id);
-
-          if (userError) throw userError;
-          setAdminUser(userData.user as AdminUser);
-        } else {
-          // Regular user sees admin
-          const { data: adminUsers, error } =
-            await supabase.auth.admin.listUsers();
-
-          if (error) throw error;
-
-          const admin = adminUsers.users.find(
-            (u) => u.user_metadata?.role === "admin"
-          );
-          if (admin) {
-            setAdminUser(admin as AdminUser);
-          }
+        const admin = adminUsers.users.find(
+          (u) => u.user_metadata?.role === "admin"
+        );
+        if (admin) {
+          setAdminUser(admin as AdminUser);
         }
       } catch (error) {
-        console.error("Error loading users:", error);
+        console.error("Error loading admin user:", error);
       } finally {
         setIsLoading(false);
       }
@@ -117,49 +108,10 @@ export default function Messages() {
 
   if (!user) return null;
 
+  // Remove duplicate fetchMessages function and useEffect
   const isAdmin = user.user_metadata.role === "admin";
-  const fetchMessages = async () => {
-    if (!user) return;
 
-    try {
-      const { data: messages, error } = await supabase
-        .from("messages")
-        .select("*")
-        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-        .order("created_at", { ascending: false });
-      console.log(messages);
-      if (error) throw error;
-      setMessages(messages || []);
-    } catch (error) {
-      console.error("Error fetching messages:", error);
-    }
-  };
-  useEffect(() => {
-    fetchMessages();
-
-    // Set up real-time subscription for new messages
-    const subscription = supabase
-      .channel("messages")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `sender_id=eq.${user.id} OR receiver_id=eq.${user.id}`,
-        },
-        () => {
-          fetchMessages();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [user]);
   // Add file state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Add file upload handler
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,136 +165,292 @@ export default function Messages() {
   };
 
   // Modify renderMessage to display files
+  // Update the renderMessage function to match the new style
   const renderMessage = (message: any) => {
     const isCurrentUser = message.sender_id === user?.id;
     return (
       <div
         key={message.id}
-        className="flex items-center p-4 hover:bg-slate-700/50 transition-colors cursor-pointer border-b border-slate-700/50"
+        className={`flex ${
+          isCurrentUser ? "justify-end" : "justify-start"
+        } mb-4`}
       >
-        <div className="h-12 w-12 rounded-full bg-indigo-500/20 flex items-center justify-center mr-4">
-          <MessageSquare className="h-6 w-6 text-indigo-400" />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-white">
-              {isCurrentUser
-                ? "You"
-                : adminUser?.user_metadata.full_name || "Admin"}
-            </h3>
-            <span className="text-xs text-slate-400">
-              {new Date(message.created_at).toLocaleDateString()}
+        <div
+          className={`flex max-w-[70%] ${
+            isCurrentUser ? "flex-row-reverse" : "flex-row"
+          } items-start gap-2`}
+        >
+          <div className="h-8 w-8 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+            <MessageSquare className="h-4 w-4 text-indigo-400" />
+          </div>
+          <div
+            className={`rounded-xl p-3 ${
+              isCurrentUser
+                ? "bg-indigo-500 text-white"
+                : "bg-slate-700 text-slate-200"
+            }`}
+          >
+            <p className="text-sm">{message.content}</p>
+            {message.image_url && (
+              <a
+                href={message.image_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center text-sm text-slate-300 hover:text-white"
+              >
+                📎 Attachment
+              </a>
+            )}
+            <span className="text-xs opacity-50 mt-1 block">
+              {new Date(message.created_at).toLocaleTimeString()}
             </span>
           </div>
-          <p className="text-sm text-slate-300 truncate">{message.content}</p>
-          {message.image_url && (
-            <a
-              href={message.image_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center text-sm text-indigo-400 hover:text-indigo-300"
-            >
-              📎 {message.image_url || "Attachment"}
-            </a>
-          )}
         </div>
       </div>
     );
   };
+  // Add new interfaces at the top
+
+  // Add new state for users and selected user
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+
+  // Add new function to fetch all users and their last messages
+  const fetchMessages = async () => {
+    if (!user) return;
+
+    try {
+      const { data: messages, error } = await supabase
+        .from("messages")
+        .select("*")
+        .or(
+          isAdmin && selectedUser
+            ? `and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id})`
+            : `and(sender_id.eq.${user.id},receiver_id.eq.${adminId}),and(sender_id.eq.${adminId},receiver_id.eq.${user.id})`
+        )
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      setMessages(messages || []);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    }
+  };
+  useEffect(() => {
+    fetchMessages();
+
+    // Set up real-time subscription for new messages
+    const subscription = supabase
+      .channel("messages")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter:
+            isAdmin && selectedUser
+              ? `(sender_id=eq.${selectedUser.id} AND receiver_id=eq.${user.id}) OR (sender_id=eq.${user.id} AND receiver_id=eq.${selectedUser.id})`
+              : `(sender_id=eq.${user.id} AND receiver_id=eq.${adminId}) OR (sender_id=eq.${adminId} AND receiver_id=eq.${user.id})`,
+        },
+        () => {
+          fetchMessages();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user, selectedUser]);
+  // Modify the admin return statement to include the user list
+  if (isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-900 p-4 md:p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <Link
+              to="/purple"
+              className="inline-flex items-center text-slate-400 hover:text-white"
+            >
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              Back to Admin Panel
+            </Link>
+          </div>
+
+          <div className="bg-slate-800/90 backdrop-blur-sm rounded-xl shadow-xl border border-slate-700/50 flex h-[calc(100vh-8rem)]">
+            {/* Users List Sidebar */}
+            <div className="w-80 border-r border-slate-700/50">
+              <div className="p-4 border-b border-slate-700/50">
+                <h2 className="text-lg font-semibold text-white">Users</h2>
+              </div>
+              <div className="overflow-y-auto h-[calc(100%-4rem)]">
+                {users.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => setSelectedUser(u)}
+                    className={`w-full p-4 text-left hover:bg-slate-700/50 transition-colors ${
+                      selectedUser?.id === u.id ? "bg-slate-700/50" : ""
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3">
+                        <MessageSquare className="h-5 w-5 text-indigo-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-white truncate">
+                          {u.full_name || u.email}
+                        </h3>
+                        {u.last_message && (
+                          <p className="text-xs text-slate-400 truncate mt-1">
+                            {u.last_message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col">
+              {selectedUser ? (
+                <>
+                  <div className="p-4 border-b border-slate-700/50">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3">
+                        <MessageSquare className="h-5 w-5 text-indigo-400" />
+                      </div>
+                      <div>
+                        <h1 className="text-lg font-semibold text-white">
+                          {selectedUser.full_name || selectedUser.email}
+                        </h1>
+                        <p className="text-sm text-slate-400">Chat with user</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {isLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {messages && messages.length > 0 ? (
+                          messages.map((message) => renderMessage(message))
+                        ) : (
+                          <div className="text-center py-8 text-slate-400">
+                            No messages yet with this user.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4 border-t border-slate-700/50">
+                    <div className="flex gap-2">
+                      <textarea
+                        className="flex-1 bg-slate-700 text-white rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 h-[60px]"
+                        placeholder="Type your message here..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            newMessage.trim()
+                          ) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                      />
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="file"
+                          id="file-upload"
+                          className="hidden"
+                          accept="image/png, image/gif, image/jpeg"
+                          onChange={handleFileSelect}
+                        />
+                        <label
+                          htmlFor="file-upload"
+                          className="w-[60px] h-[60px] flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition-colors"
+                        >
+                          📎
+                        </label>
+                      </div>
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={!newMessage.trim() && !selectedFile}
+                        className="w-[60px] h-[60px] bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center"
+                      >
+                        ➤
+                      </button>
+                    </div>
+                    {selectedFile && (
+                      <div className="mt-2 text-sm text-slate-400 flex items-center gap-2">
+                        <span>📎 {selectedFile.name}</span>
+                        <button
+                          onClick={() => setSelectedFile(null)}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  Select a user to start chatting
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <Link
-            to={isAdmin ? "/purple" : "/dashboard"}
+            to="/dashboard"
             className="inline-flex items-center text-slate-400 hover:text-white"
           >
             <ArrowLeft className="h-5 w-5 mr-2" />
-            Back to {isAdmin ? "Admin Panel" : "Dashboard"}
+            Back to Dashboard
           </Link>
         </div>
 
-        <div className="bg-slate-800/90 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-700/50">
-          <div className="flex items-center mb-6">
-            <div className="h-12 w-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mr-4">
-              <MessageSquare className="h-6 w-6 text-indigo-400" />
-            </div>
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-400">
-              Messages
-            </h1>
-            <div className="flex-1 flex justify-end">
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors duration-200 flex items-center"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                New Message
-              </button>
-            </div>
-          </div>
-          {isModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-slate-800 p-6 rounded-xl shadow-xl max-w-lg w-full mx-4">
-                <h2 className="text-xl font-bold text-white mb-4">
-                  New Message
-                </h2>
-                <textarea
-                  className="w-full h-32 bg-slate-700 text-white rounded-lg p-3 mb-4 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Type your message here..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                />
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Attach File (optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/png, image/gif, image/jpeg"
-                    onChange={handleFileSelect}
-                    className="block w-full text-sm text-slate-300
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-lg file:border-0
-              file:text-sm file:font-medium
-              file:bg-indigo-500 file:text-white
-              hover:file:bg-indigo-600
-              file:cursor-pointer"
-                  />
-                  {selectedFile && (
-                    <div className="mt-2 text-sm text-slate-400">
-                      Selected: {selectedFile.name}
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setNewMessage("");
-                      setSelectedFile(null);
-                    }}
-                    className="px-4 py-2 text-slate-300 hover:text-white transition-colors duration-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim() && !selectedFile}
-                    className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors duration-200"
-                  >
-                    Send
-                  </button>
-                </div>
+        <div className="bg-slate-800/90 backdrop-blur-sm rounded-xl shadow-xl border border-slate-700/50 flex flex-col h-[calc(100vh-8rem)]">
+          <div className="p-4 border-b border-slate-700/50">
+            <div className="flex items-center">
+              <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3">
+                <MessageSquare className="h-5 w-5 text-indigo-400" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-white">
+                  Support Chat
+                </h1>
+                <p className="text-sm text-slate-400">
+                  Chat with our support team
+                </p>
               </div>
             </div>
-          )}
-          {isLoading ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
-            </div>
-          ) : adminUser ? (
-            <div className="flex flex-col h-[calc(100vh-16rem)]">
-              <div className="flex-1 overflow-y-auto mb-4 space-y-4 p-4">
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+              </div>
+            ) : (
+              <div className="space-y-4">
                 {messages && messages.length > 0 ? (
                   messages.map((message) => renderMessage(message))
                 ) : (
@@ -351,24 +459,60 @@ export default function Messages() {
                   </div>
                 )}
               </div>
-              <MessagePanel
-                userId={user.id}
-                isAdmin={isAdmin}
-                otherUserId={adminUser.id}
-                userName={adminUser.user_metadata.full_name || adminUser.email}
+            )}
+          </div>
+
+          <div className="p-4 border-t border-slate-700/50">
+            <div className="flex gap-2">
+              <textarea
+                className="flex-1 bg-slate-700 text-white rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 h-[60px]"
+                placeholder="Type your message here..."
+                value={newMessage}
+                onChange={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && newMessage.trim()) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  } else {
+                    setNewMessage(e.target.value);
+                  }
+                  setNewMessage(e.target.value);
+                }}
               />
+              <div className="flex flex-col gap-2">
+                <input
+                  type="file"
+                  id="file-upload"
+                  className="hidden"
+                  accept="image/png, image/gif, image/jpeg"
+                  onChange={handleFileSelect}
+                />
+                <label
+                  htmlFor="file-upload"
+                  className="w-[60px] h-[60px] flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition-colors"
+                >
+                  📎
+                </label>
+              </div>
+              <button
+                onClick={handleSendMessage}
+                disabled={!newMessage.trim() && !selectedFile}
+                className="w-[60px] h-[60px] bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center"
+              >
+                ➤
+              </button>
             </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto mb-4 space-y-4 p-4">
-              {messages && messages.length > 0 ? (
-                messages.map((message) => renderMessage(message))
-              ) : (
-                <div className="text-center py-8 text-slate-400">
-                  No messages yet. Start a conversation!
-                </div>
-              )}
-            </div>
-          )}
+            {selectedFile && (
+              <div className="mt-2 text-sm text-slate-400 flex items-center gap-2">
+                <span>📎 {selectedFile.name}</span>
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

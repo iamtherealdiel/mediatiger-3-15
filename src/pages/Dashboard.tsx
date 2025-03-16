@@ -152,13 +152,13 @@ export default function Dashboard() {
   }, [hasRequest, applicationStatus, navigate]);
 
   useEffect(() => {
-    if (applicationStatus === "approved" && !statusChecked) {
+    /*    if (applicationStatus === "approved" && !statusChecked) {
       setStatusChecked(true);
       toast.success("Your application has been approved!", {
         duration: 5000,
         icon: "🎉",
       });
-    }
+    } */
   }, [applicationStatus]);
   if (isLoading && !applicationStatus && !showOnboarding) {
     return (
