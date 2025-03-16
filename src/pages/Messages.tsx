@@ -25,7 +25,7 @@ export default function Messages() {
       try {
         // If user is admin, they need to see all users
         const isAdmin = user.user_metadata?.role === "admin";
-
+        console.log(user.user_metadata);
         if (isAdmin) {
           // Admin sees all users with pending/approved applications
           const { data: users, error } = await supabase
