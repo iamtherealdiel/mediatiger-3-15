@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import OnboardingPopup from "../components/OnboardingPopup";
+import { useRef } from "react";
+import { Upload } from "lucide-react"; // Add Upload icon
 
 // Utility to prevent duplicate toasts
 const shownToasts = new Set<string>();
@@ -61,7 +63,57 @@ export default function Dashboard() {
   const [hasRequest, setHasRequest] = useState<boolean>(false);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [profileUrl, setProfileUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Add this new function for handling profile upload
+  const handleProfileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    try {
+      if (!e.target.files || !e.target.files[0]) return;
+
+      const file = e.target.files[0];
+      setUploading(true);
+
+      // Upload to Supabase Storage
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${user?.id}/${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from("profile-pictures")
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("profile-pictures").getPublicUrl(filePath);
+
+      // Update user metadata with new profile URL
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: {
+          ...user?.user_metadata,
+          avatar_url: publicUrl,
+        },
+      });
+
+      if (updateError) throw updateError;
+
+      setProfileUrl(publicUrl);
+      showUniqueToast("Profile picture updated successfully!", "success");
+    } catch (error: any) {
+      showUniqueToast(
+        error.message || "Error updating profile picture",
+        "error"
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
   // Move handleSignOut before it's used
   const handleSignOut = async () => {
     try {
@@ -353,13 +405,43 @@ export default function Dashboard() {
 
             {/* User Profile Summary */}
             <div className="px-4 py-6 text-center">
-              <div className="relative inline-block">
-                <div className="h-24 w-24 rounded-full bg-indigo-600 mx-auto mb-4 flex items-center justify-center text-white text-3xl font-bold">
-                  {user?.user_metadata?.full_name?.[0]?.toUpperCase() || (
-                    <UserCircle className="h-16 w-16" />
+              <div className="relative inline-block group">
+                <div
+                  className="h-24 w-24 rounded-full bg-indigo-600 mx-auto mb-4 flex items-center justify-center text-white text-3xl font-bold relative overflow-hidden cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {profileUrl || user?.user_metadata?.avatar_url ? (
+                    <img
+                      src={profileUrl || user?.user_metadata?.avatar_url}
+                      alt="Profile"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    user?.user_metadata?.full_name?.[0]?.toUpperCase() || (
+                      <UserCircle className="h-16 w-16" />
+                    )
                   )}
+
+                  {/* Upload overlay */}
+                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    {uploading ? (
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-white" />
+                    ) : (
+                      <Upload className="h-6 w-6 text-white" />
+                    )}
+                  </div>
                 </div>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleProfileUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
               </div>
+
+              {/* Rest of the profile section remains the same */}
               <h2 className="text-xl font-bold text-white mb-1">
                 Welcome,{" "}
                 {user?.user_metadata?.full_name?.split(" ")[0] || "User"}!
