@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase, isCORSError } from '../lib/supabase';
-import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { User } from "@supabase/supabase-js";
+import { supabase, isCORSError } from "../lib/supabase";
+import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 
 interface AuthContextType {
   user: User | null;
@@ -25,14 +25,14 @@ const shownToasts = new Set<string>();
 // Function to show toast only if it hasn't been shown recently
 const showUniqueToast = (
   message: string,
-  type: 'success' | 'error',
+  type: "success" | "error",
   id?: string
 ) => {
   const toastId = id || message;
   if (!shownToasts.has(toastId)) {
     shownToasts.add(toastId);
 
-    if (type === 'success') {
+    if (type === "success") {
       toast.success(message, { id: toastId });
     } else {
       toast.error(message, { id: toastId });
@@ -70,20 +70,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ) {
           setShowOnboarding(true);
           setHasShownVerification(true);
-          navigate('/dashboard', { replace: true });
+          navigate("/dashboard", { replace: true });
         }
 
         // If user is verified, redirect to dashboard
         if (currentUser?.email_confirmed_at) {
-          navigate('/dashboard', { replace: true });
+          navigate("/dashboard", { replace: true });
         }
       })
       .catch((error) => {
         if (isCORSError(error)) {
           showUniqueToast(
-            'CORS Error: Unable to authenticate. Please check domain settings.',
-            'error',
-            'cors-auth-error'
+            "CORS Error: Unable to authenticate. Please check domain settings.",
+            "error",
+            "cors-auth-error"
           );
         }
         setLoading(false);
@@ -105,21 +105,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setShowOnboarding(true);
         setHasShownVerification(true);
         showUniqueToast(
-          'Email verified successfully!',
-          'success',
-          'email-verified'
+          "Email verified successfully!",
+          "success",
+          "email-verified"
         );
-        navigate('/dashboard', { replace: true });
+        navigate("/dashboard", { replace: true });
       }
 
       // If user is verified, redirect to dashboard
       if (currentUser?.email_confirmed_at) {
-        navigate('/dashboard', { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: {
             full_name: name,
             onboarding_complete: false,
-            role: 'user'
+            role: "user",
           },
           emailRedirectTo: `${currentOrigin}/welcome`,
         },
@@ -142,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         if (isCORSError(error)) {
           throw new Error(
-            'CORS Error: Unable to create account. Please check domain settings.'
+            "CORS Error: Unable to create account. Please check domain settings."
           );
         }
         throw error;
@@ -150,14 +150,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.user && !data.user.confirmed_at) {
         showUniqueToast(
-          'Please check your email for a confirmation link to complete your registration.',
-          'success',
-          'signup-email-sent'
+          "Please check your email for a confirmation link to complete your registration.",
+          "success",
+          "signup-email-sent"
         );
       }
     } catch (error: any) {
-      console.error('Sign up error:', error);
-      throw new Error(error.message || 'Failed to create account');
+      console.error("Sign up error:", error);
+      throw new Error(error.message || "Failed to create account");
     }
   };
 
@@ -171,14 +171,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         if (isCORSError(error)) {
           throw new Error(
-            'CORS Error: Unable to sign in. Please check domain settings.'
+            "CORS Error: Unable to sign in. Please check domain settings."
           );
         }
         throw error;
       }
 
       if (data.user && !data.user.email_confirmed_at) {
-        throw new Error('Please verify your email before signing in.');
+        throw new Error("Please verify your email before signing in.");
       }
 
       // If user is verified but hasn't completed onboarding, show the popup
@@ -190,39 +190,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Successfully signed in and verified
-      showUniqueToast('Successfully logged in!', 'success', 'signin-success');
-      navigate('/dashboard');
+      showUniqueToast("Successfully logged in!", "success", "signin-success");
+      navigate("/dashboard");
     } catch (error: any) {
-      console.error('Sign in error:', error);
-      throw new Error(error.message || 'Invalid credentials');
+      console.error("Sign in error:", error);
+      throw new Error(error.message || "Invalid credentials");
     }
   };
 
   const signOut = async () => {
     try {
       // Get current session
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) {
         // No active session, just navigate to login
-        navigate('/login');
+        navigate("/login");
         return;
       }
-      
+
       // Clear session and storage
       await supabase.auth.signOut();
       localStorage.clear(); // Clear all local storage
       sessionStorage.clear(); // Clear all session storage
 
-      showUniqueToast('Signed out successfully', 'success', 'signout-success');
-      navigate('/login');
+      showUniqueToast("Signed out successfully", "success", "signout-success");
+      navigate("/login");
     } catch (error: any) {
-      console.error('Sign out error:', error);
+      console.error("Sign out error:", error);
       // Clear storage and navigate even if there's an error
       localStorage.clear();
       sessionStorage.clear();
-      navigate('/login');
-      showUniqueToast('Signed out with warnings', 'success', 'signout-warning');
+      navigate("/login");
+      showUniqueToast("Signed out with warnings", "success", "signout-warning");
     }
   };
 
@@ -234,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!email) {
         return {
           success: false,
-          message: 'Email is required to resend verification',
+          message: "Email is required to resend verification",
         };
       }
 
@@ -248,7 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentOrigin = window.location.origin;
 
       const { error } = await supabase.auth.resend({
-        type: 'signup',
+        type: "signup",
         email,
         options: {
           emailRedirectTo: `${currentOrigin}/welcome?t=${timestamp}`,
@@ -262,13 +264,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         // Handle rate limiting errors specifically
         if (
-          error.message.includes('rate') ||
-          error.message.includes('too many requests')
+          error.message.includes("rate") ||
+          error.message.includes("too many requests")
         ) {
           return {
             success: false,
             message:
-              'Please wait a moment before requesting another verification email.',
+              "Please wait a moment before requesting another verification email.",
           };
         }
         throw error;
@@ -276,13 +278,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return {
         success: true,
-        message: 'Verification email has been resent. Please check your inbox.',
+        message: "Verification email has been resent. Please check your inbox.",
       };
     } catch (error: any) {
-      console.error('Error resending verification email:', error);
+      console.error("Error resending verification email:", error);
       return {
         success: false,
-        message: error.message || 'Failed to resend verification email',
+        message: error.message || "Failed to resend verification email",
       };
     }
   };
@@ -308,7 +310,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

@@ -27,7 +27,7 @@ import {
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
-const adminId = "26c83260-54f6-4dd4-bc65-d21e7e52632b";
+export const adminId = "26c83260-54f6-4dd4-bc65-d21e7e52632b";
 type UserLookupData = {
   id: string;
   email: string;
