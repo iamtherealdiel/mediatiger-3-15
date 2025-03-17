@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import MessagePanel from "../components/MessagePanel";
 import { adminId } from "./AdminPanel";
+import { X } from "lucide-react"; // Add X icon for close button
 
 interface AdminUser {
   id: string;
@@ -22,7 +23,7 @@ export default function Messages() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   // Simplified messages fetching - only get messages between user and admin
 
   // Simplified admin user fetching - only get the admin user
@@ -163,7 +164,27 @@ export default function Messages() {
       console.error("Error sending message:", error);
     }
   };
+  const ImagePreview = () => {
+    if (!previewImage) return null;
 
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div className="relative max-w-[90vw] max-h-[90vh]">
+          <button
+            onClick={() => setPreviewImage(null)}
+            className="absolute -top-4 -right-4 p-2 bg-slate-800 rounded-full text-white hover:bg-slate-700 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+          />
+        </div>
+      </div>
+    );
+  };
   // Modify renderMessage to display files
   // Update the renderMessage function to match the new style
   const renderMessage = (message: any) => {
@@ -192,14 +213,12 @@ export default function Messages() {
           >
             <p className="text-sm">{message.content}</p>
             {message.image_url && (
-              <a
-                href={message.image_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center text-sm text-slate-300 hover:text-white"
-              >
-                📎 Attachment
-              </a>
+              <img
+                src={message.image_url}
+                alt="Message attachment"
+                className="mt-2 max-w-[200px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setPreviewImage(message.image_url)}
+              />
             )}
             <span className="text-xs opacity-50 mt-1 block">
               {new Date(message.created_at).toLocaleTimeString()}
@@ -267,6 +286,7 @@ export default function Messages() {
   if (isAdmin) {
     return (
       <div className="min-h-screen bg-slate-900 p-4 md:p-8">
+        <ImagePreview />
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <Link
@@ -419,6 +439,7 @@ export default function Messages() {
   }
   return (
     <div className="min-h-screen bg-slate-900 p-4 md:p-8">
+      <ImagePreview />
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <Link
@@ -471,14 +492,12 @@ export default function Messages() {
                 className="flex-1 bg-slate-700 text-white rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 h-[60px]"
                 placeholder="Type your message here..."
                 value={newMessage}
-                onChange={(e) => {
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && newMessage.trim()) {
                     e.preventDefault();
                     handleSendMessage();
-                  } else {
-                    setNewMessage(e.target.value);
                   }
-                  setNewMessage(e.target.value);
                 }}
               />
               <div className="flex flex-col gap-2">
